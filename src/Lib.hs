@@ -24,37 +24,37 @@ infixl 6 :-:
 infixl 7 :*:
 infixl 7 :/:
 
-checkedF :: (Integer -> Integer -> Integer) -> Int -> Int -> Either EvalError Int
-checkedF f a b =
+checkedF
+  :: (Integer -> Integer -> Integer)
+  -> Int
+  -> Int
+  -> Either EvalError Int
+checkedF f a b = do
   let res = f (toInteger a) (toInteger b)
-  in
-    when
-      (res < toInteger (minBound :: Int) || res > toInteger (maxBound :: Int))
-      (Left OverflowError) >>
-    return (fromIntegral res)
+  when (res < toInteger (minBound :: Int) || res > toInteger (maxBound :: Int))
+    (Left OverflowError)
+  return (fromIntegral res)
 
 maybeEval
   :: (Integer -> Integer -> Integer)
   -> Either EvalError Int
   -> Either EvalError Int
   -> Either EvalError Int
-maybeEval f a b =
-  a >>= (\resultA ->
-  b >>= (\resultB ->
+maybeEval f a b = do
+  resultA <- a
+  resultB <- b
   checkedF f resultA resultB
-  ))
 
 eval :: Expr -> Either EvalError Int
+eval (Const n) = return n
 eval (a :+: b) = maybeEval (+) (eval a) (eval b)
 eval (a :-: b) = maybeEval (-) (eval a) (eval b)
 eval (a :*: b) = maybeEval (*) (eval a) (eval b)
-eval (a :/: b) =
-  eval b >>= (\resultB ->
-    if resultB == 0
+eval (a :/: b) = do
+  resultB <- eval b
+  if resultB == 0
     then Left DivisionByZero
     else maybeEval div (eval a) (return resultB)
-  )
-eval (Const n) = return n
 
 newtype State s a = State { runState :: s -> (a, s) }
 
@@ -79,18 +79,16 @@ instance Monad (State s) where
     in ff newS)
 
 toNats' :: (Expr -> Expr -> Expr) -> Expr -> Expr -> State Int Expr
-toNats' f a b =
-  toNats a >>= (\resA ->
-  toNats b >>= (\resB ->
+toNats' f a b = do
+  resA <- toNats a
+  resB <- toNats b
   return (f resA resB)
-  ))
 
 toNats :: Expr -> State Int Expr
-toNats (Const _) =
-  getState >>= (\lastUnused ->
-  updateState (lastUnused + 1) >> (
+toNats (Const _) = do
+  lastUnused <- getState
+  updateState (lastUnused + 1)
   return (Const lastUnused)
-  ))
 toNats (a :+: b) = toNats' (:+:) a b
 toNats (a :-: b) = toNats' (:-:) a b
 toNats (a :*: b) = toNats' (:*:) a b
