@@ -33,7 +33,7 @@ checkedF f a b = do
   let res = f (toInteger a) (toInteger b)
   when (res < toInteger (minBound :: Int) || res > toInteger (maxBound :: Int))
     (Left OverflowError)
-  return (fromIntegral res)
+  pure (fromIntegral res)
 
 maybeEval
   :: (Integer -> Integer -> Integer)
@@ -46,7 +46,7 @@ maybeEval f a b = do
   checkedF f resultA resultB
 
 eval :: Expr -> Either EvalError Int
-eval (Const n) = return n
+eval (Const n) = pure n
 eval (a :+: b) = maybeEval (+) (eval a) (eval b)
 eval (a :-: b) = maybeEval (-) (eval a) (eval b)
 eval (a :*: b) = maybeEval (*) (eval a) (eval b)
@@ -54,15 +54,15 @@ eval (a :/: b) = do
   resultB <- eval b
   if resultB == 0
     then Left DivisionByZero
-    else maybeEval div (eval a) (return resultB)
+    else maybeEval div (eval a) (pure resultB)
 
 newtype State s a = State { runState :: s -> (a, s) }
 
 getState :: State s s
-getState = State (\s -> (s, s))
+getState = State $ \s -> (s, s)
 
 updateState :: s -> State s ()
-updateState newS = State (\_ -> ((), newS))
+updateState newS = State $ \_ -> ((), newS)
 
 instance Functor (State s) where
   fmap = liftM
@@ -73,26 +73,20 @@ instance Applicative (State s) where
 
 instance Monad (State s) where
   return x = State (\s -> (x, s))
-  (>>=) (State a) f = State (\s ->
+  (>>=) (State a) f = State $ \s ->
     let (resA, newS) = a s
         State ff = f resA
-    in ff newS)
-
-toNats' :: (Expr -> Expr -> Expr) -> Expr -> Expr -> State Int Expr
-toNats' f a b = do
-  resA <- toNats a
-  resB <- toNats b
-  return (f resA resB)
+    in ff newS
 
 toNats :: Expr -> State Int Expr
 toNats (Const _) = do
   lastUnused <- getState
   updateState (lastUnused + 1)
-  return (Const lastUnused)
-toNats (a :+: b) = toNats' (:+:) a b
-toNats (a :-: b) = toNats' (:-:) a b
-toNats (a :*: b) = toNats' (:*:) a b
-toNats (a :/: b) = toNats' (:/:) a b
+  pure (Const lastUnused)
+toNats (a :+: b) = (:+:) <$> toNats a <*> toNats b
+toNats (a :-: b) = (:-:) <$> toNats a <*> toNats b
+toNats (a :*: b) = (:*:) <$> toNats a <*> toNats b
+toNats (a :/: b) = (:/:) <$> toNats a <*> toNats b
 
 {-
  - Monad - вычисление с побочным эффектом
